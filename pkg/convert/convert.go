@@ -39,6 +39,10 @@ func PrintAllureReports(results []allure.Result, fm fmngr.FileManager) []error {
 		if err != nil {
 			errs = append(errs, err)
 		}
+		err = fm.SaveAttachments(result)
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errs
 }

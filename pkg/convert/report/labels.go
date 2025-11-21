@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/onsi/ginkgo/v2/types"
 	"github.com/ozontech/allure-go/pkg/allure"
 )
 
@@ -141,4 +142,17 @@ func (ls *DefaultLabelsScraper) GetDescription(defaultDescription string) string
 		description = defaultDescription
 	}
 	return description
+}
+
+func (ls *DefaultLabelsScraper) GetAttachmentsFromReportEntries(entries []types.ReportEntry) map[string]string {
+	attachmentsMap := make(map[string]string)
+	for _, entry := range entries {
+		// As per user instruction, ReportEntryValues are always strings, which are file paths.
+		// All entries are considered valid attachments.
+		path := entry.StringRepresentation()
+		if path != "" {
+			attachmentsMap[entry.Name] = path
+		}
+	}
+	return attachmentsMap
 }

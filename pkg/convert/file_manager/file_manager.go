@@ -16,6 +16,7 @@ const (
 
 type FileManager interface {
 	SaveJSONResult(result allure.Result) error
+	SaveAttachments(result allure.Result) error
 }
 
 type fileManager struct {
@@ -41,6 +42,16 @@ func (m *fileManager) SaveJSONResult(result allure.Result) error {
 	err = m.createFile(fmt.Sprintf("%s-result.json", result.UUID), bResult)
 	if err != nil {
 		return errors.Wrap(err, "Cannot save Result")
+	}
+	return nil
+}
+
+func (m *fileManager) SaveAttachments(result allure.Result) error {
+	for _, attachment := range result.Attachments {
+		err := m.createFile(attachment.Source, attachment.GetContent())
+		if err != nil {
+			return errors.Wrap(err, "Cannot save Attachment")
+		}
 	}
 	return nil
 }

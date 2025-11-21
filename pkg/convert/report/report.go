@@ -4,6 +4,7 @@ import (
 	// #nosec
 	"crypto/md5"
 	"encoding/hex"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ type (
 		CreateAllureLabels() []*allure.Label
 		GetID(uuid.UUID) (uuid.UUID, error)
 		GetDescription(string) string
+		GetAttachmentsFromReportEntries([]types.ReportEntry) map[string]string
 	}
 	Opt func(o *DefaultReport)
 )
@@ -72,6 +74,46 @@ func (r *DefaultReport) GenerateAllureReport(steps []*allure.Step) (allure.Resul
 		statusDetails.Message = r.specReport.Failure.Message
 		statusDetails.Trace = r.specReport.Failure.Location.FullStackTrace
 	}
+
+	var allureAttachments []*allure.Attachment
+	attachmentsMap := r.labelScraper.GetAttachmentsFromReportEntries(r.specReport.ReportEntries)
+
+	for attachmentName, fileContent := range attachmentsMap {
+		if fileContent == "" {
+			continue
+		}
+		var contentType allure.MimeType = "application/octet-stream" // Default content type
+
+		text := filepath.Ext(attachmentName) // Use attachmentName for extension as it's the intended file name
+
+		switch strings.ToLower(text) {
+		case ".json":
+			contentType = "application/json"
+		case ".xml":
+			contentType = "application/xml"
+		case ".html", ".htm":
+			contentType = "text/html"
+		case ".png":
+			contentType = "image/png"
+		case ".jpg", ".jpeg":
+			contentType = "image/jpeg"
+		case ".gif":
+			contentType = "image/gif"
+		case ".svg":
+			contentType = "image/svg+xml"
+		case ".pdf":
+			contentType = "application/pdf"
+		case ".zip":
+			contentType = "application/zip"
+		case ".txt", ".log":
+			contentType = "text/plain"
+		default:
+			contentType = "application/octet-stream"
+		}
+
+		allureAttachments = append(allureAttachments, allure.NewAttachment(attachmentName, contentType, []byte(fileContent)))
+	}
+
 	return allure.Result{
 		Name:          r.specReport.LeafNodeText,
 		Description:   description,
@@ -85,6 +127,7 @@ func (r *DefaultReport) GenerateAllureReport(steps []*allure.Step) (allure.Resul
 		TestCaseID:    testCaseID,
 		HistoryID:     GetMD5Hash(testCaseID),
 		Labels:        r.labelScraper.CreateAllureLabels(),
+		Attachments:   allureAttachments,
 		ToPrint:       true,
 	}, nil
 }

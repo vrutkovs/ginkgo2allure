@@ -23,7 +23,9 @@ type (
 		Err error
 	}
 	mockFileManager struct {
-		SaveErr error
+		SaveErr          error
+		SavedResult      allure.Result
+		SavedAttachments []*allure.Attachment
 	}
 )
 
@@ -38,7 +40,12 @@ func (m mockTransform) AnalyzeEvents(_ types.SpecEvents, _ types.Failure) error 
 func (m mockTransform) GetAllureSteps() []*allure.Step {
 	return []*allure.Step{}
 }
-func (m mockFileManager) SaveJSONResult(_ allure.Result) error {
+func (m *mockFileManager) SaveJSONResult(result allure.Result) error {
+	m.SavedResult = result
+	return m.SaveErr
+}
+func (m *mockFileManager) SaveAttachments(result allure.Result) error {
+	m.SavedAttachments = result.Attachments
 	return m.SaveErr
 }
 
@@ -87,26 +94,83 @@ func TestConvertGinkgoToAllureReport(t *testing.T) {
 }
 
 func TestConvertPrintAllureReports(t *testing.T) {
+	stringAttachment := allure.Result{
+		Name: "Test with string attachment",
+		Attachments: []*allure.Attachment{
+			allure.NewAttachment("test_file.txt", "text/plain", []byte("file content")),
+		},
+	}
+	binaryAttachment := allure.Result{
+		Name: "Test with binary attachment",
+		Attachments: []*allure.Attachment{
+			allure.NewAttachment("foo.tar.gz", "application/octet-stream", []byte{0, 1, 2, 3, 4, 5}),
+		},
+	}
+
 	var tests = []struct {
 		name            string
-		mockFileManager mockFileManager
+		results         []allure.Result
+		expectedResult  allure.Result
+		mockFileManager *mockFileManager
 		errs            []error
-	}{{
-		name: "correct",
-		mockFileManager: mockFileManager{
-			SaveErr: nil,
+	}{
+		{
+			name:           "correct",
+			results:        []allure.Result{{}},
+			expectedResult: stringAttachment,
+			mockFileManager: &mockFileManager{
+				SaveErr: nil,
+			},
+			errs: []error{},
 		},
-		errs: []error{},
-	}, {
-		name: "wrong",
-		mockFileManager: mockFileManager{
-			SaveErr: errTest,
+		{
+			name:           "wrong",
+			results:        []allure.Result{{}},
+			expectedResult: stringAttachment,
+			mockFileManager: &mockFileManager{
+				SaveErr: errTest,
+			},
+			errs: []error{errTest, errTest},
 		},
-		errs: []error{errTest},
-	}}
+		{
+			name:           "with string attachment",
+			results:        []allure.Result{stringAttachment},
+			expectedResult: stringAttachment,
+			mockFileManager: &mockFileManager{
+				SaveErr: nil,
+			},
+			errs: []error{},
+		},
+		{
+			name:           "with binary attachment",
+			results:        []allure.Result{stringAttachment},
+			expectedResult: binaryAttachment,
+			mockFileManager: &mockFileManager{
+				SaveErr: nil,
+			},
+			errs: []error{},
+		},
+	}
 
 	for _, tt := range tests {
-		errs := convert.PrintAllureReports([]allure.Result{{}}, tt.mockFileManager)
+		tt.mockFileManager.SavedResult = allure.Result{} // Reset for each test run
+		tt.mockFileManager.SavedAttachments = nil        // Reset for each test run
+
+		errs := convert.PrintAllureReports(tt.results, tt.mockFileManager)
 		assert.Equal(t, tt.errs, errs, fmt.Sprintf("got expected errors (%s)", tt.name))
+
+		if len(tt.results) > 0 && tt.mockFileManager.SaveErr == nil {
+			assert.Equal(t, tt.results[0], tt.mockFileManager.SavedResult, fmt.Sprintf("saved result mismatch (%s)", tt.name))
+
+			if tt.name == "with attachment" {
+				assert.NotEmpty(t, tt.mockFileManager.SavedAttachments, "should have attachments")
+				assert.Len(t, tt.mockFileManager.SavedAttachments, 1, "should have one attachment")
+				actualAttachment := tt.mockFileManager.SavedAttachments[0]
+				expectedAttachment := tt.expectedResult.Attachments[0]
+				assert.Equal(t, expectedAttachment.Name, actualAttachment.Name, "attachment name should match")
+				assert.Equal(t, expectedAttachment.Type, actualAttachment.Type, "attachment type should match")
+				assert.Equal(t, expectedAttachment.GetContent(), actualAttachment.GetContent(), "attachment content should match")
+			}
+		}
 	}
 }
