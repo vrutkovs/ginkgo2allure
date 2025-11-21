@@ -200,6 +200,9 @@ func (t *DefaultTransform) stepInTrace(node Node, traceFiles []TraceFile) bool {
 }
 
 func (t *DefaultTransform) findErrorRootNode(nodes []Node, traceFiles []TraceFile) (errNode Node) {
+	if len(traceFiles) == 0 {
+		return
+	}
 	lastTraceFile := traceFiles[len(traceFiles)-1]
 	for _, node := range nodes {
 		if node.BeginEvent.CodeLocation.FileName == lastTraceFile.FileName &&
